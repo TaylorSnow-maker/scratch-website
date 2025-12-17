@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chrono Vault: Time Loop Escape</title>
+<style>
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  color: #f0f0f0;
+}
+
+.game {
+  background: rgba(15, 20, 35, 0.95);
+  padding: 30px 35px;
+  border-radius: 20px;
+  width: 380px;
+  text-align: center;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.7);
+  position: relative;
+}
+
+h1 { margin-top: 0; font-size: 1.8rem; letter-spacing: 1px; }
+.story { font-size: 0.95rem; margin-bottom: 15px; min-height: 55px; opacity: 0.9; }
+.timer { font-size: 0.9rem; margin-bottom: 10px; color: #ffd166; }
+input { width: 100%; padding: 10px; font-size: 1rem; border-radius: 8px; border: none; margin-bottom: 10px; }
+button { width: 100%; padding: 10px; font-size: 1rem; border: none; border-radius: 8px; background: linear-gradient(135deg, #5f27cd, #341f97); color: white; cursor: pointer; margin-bottom: 8px; }
+button.secondary { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
+button:hover { opacity: 0.9; }
+.info { margin-top: 12px; font-size: 0.85rem; opacity: 0.85; }
+.flash-success { animation: successFlash 0.6s; }
+.flash-fail { animation: failFlash 0.6s; }
+
+.celebrate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+}
+
+.celebrate.show { opacity: 1; }
+
+.celebrate h2 {
+  font-size: 2.4rem;
+  letter-spacing: 2px;
+  color: #ffd166;
+  text-shadow: 0 0 20px rgba(255,209,102,0.9);
+  animation: pop 0.6s ease-out;
+}
+
+.burst {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1dd1a1;
+  animation: burst 1s ease-out forwards;
+}
+
+@keyframes successFlash {
+  0% { box-shadow: 0 0 0px #1dd1a1; }
+  50% { box-shadow: 0 0 25px #1dd1a1; }
+  100% { box-shadow: 0 0 0px #1dd1a1; }
+}
+
+@keyframes failFlash {
+  0% { box-shadow: 0 0 0px #ee5253; }
+  50% { box-shadow: 0 0 25px #ee5253; }
+  100% { box-shadow: 0 0 0px #ee5253; }
+}
+
+@keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes burst { to { transform: translate(var(--x), var(--y)); opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="game" id="gameBox">
+  <h1>Chrono Vault</h1>
+  <div class="story" id="story"></div>
+  <div class="timer" id="timer"></div>
+  <input type="number" id="guess" placeholder="Enter vault code" />
+  <button onclick="makeGuess()">Unlock Vault</button>
+  <button class="secondary" onclick="useHint()">Use Time Hint</button>
+  <div class="info" id="info"></div>
+  <div class="celebrate" id="celebrate"><h2>VAULT CRACKED!</h2></div>
+</div>
+
+<!-- Sound for vault unlock -->
+<audio id="vaultSound">
+  <source src="https://freesound.org/data/previews/341/341695_6248476-lq.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+let level = 1, maxNumber = 10, attemptsLeft = 3 + level, hintsLeft = 2, timeLeft = 20, secret = generateNumber(), timerInterval;
+const storyText = document.getElementById('story'),
+      infoText = document.getElementById('info'),
+      timerText = document.getElementById('timer'),
+      gameBox = document.getElementById('gameBox'),
+      celebrateLayer = document.getElementById('celebrate'),
+      vaultSound = document.getElementById('vaultSound');
+
+function generateNumber() { return Math.floor(Math.random() * maxNumber) + 1; }
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timeLeft = Math.max(10, 25 - level*2);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerText.textContent = `⏳ Time Remaining: ${timeLeft}s`;
+    if (timeLeft <= 0) timelineCollapse();
+  },1000);
+}
+
+function updateInfo() {
+  infoText.textContent = `Level ${level} | Range: 1–${maxNumber} | Attempts: ${attemptsLeft} | Hints: ${hintsLeft}`;
+}
+
+function flash(type) {
+  gameBox.classList.remove('flash-success','flash-fail');
+  void gameBox.offsetWidth;
+  gameBox.classList.add(type);
+}
+
+function celebrate() {
+  vaultSound.currentTime = 0;
+  vaultSound.play();
+  
+  celebrateLayer.classList.remove('show');
+  void celebrateLayer.offsetWidth; // restart animation
+  celebrateLayer.classList.add('show');
+
+  // particle bursts
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.className = 'burst';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 80 + Math.random() * 120;
+    p.style.setProperty('--x', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--y', Math.sin(angle) * dist + 'px');
+    p.style.left = '50%';
+    p.style.top = '50%';
+    celebrateLayer.appendChild(p);
+    setTimeout(() => p.remove(), 1000);
+  }
+
+  // hide celebration after 1.5 seconds
+  setTimeout(() => {
+    celebrateLayer.classList.remove('show');
+  }, 1500);
+}
+
+function makeGuess(){
+  const input = document.getElementById('guess');
+  const guess = Number(input.value); input.value='';
+  if(!guess || guess<1 || guess>maxNumber){ storyText.textContent=`Enter a number between 1 and ${maxNumber}.`; return; }
+  attemptsLeft--;
+  if(guess===secret){
+    flash('flash-success'); celebrate(); clearInterval(timerInterval);
+    storyText.textContent=`Vault unlocked! You advance to Level ${level+1}.`;
+    level++; maxNumber+=10; attemptsLeft=3+level; hintsLeft=2; secret=generateNumber(); startTimer();
+  } else if(attemptsLeft>0){ flash('flash-fail'); storyText.textContent = guess>secret?'Too high. Time destabilizes…':'Too low. Reality shifts…'; }
+  else timelineCollapse();
+  updateInfo();
+}
+
+function useHint(){
+  if(hintsLeft<=0){ storyText.textContent='No time hints remaining.'; return; }
+  hintsLeft--; storyText.textContent = secret%2===0?'Temporal scan: The code is EVEN.':'Temporal scan: The code is ODD.';
+  updateInfo();
+}
+
+function timelineCollapse(){ 
+  flash('flash-fail'); clearInterval(timerInterval); 
+  storyText.textContent='Timeline collapsed. Simulation reset.'; 
+  level=1; maxNumber=10; attemptsLeft=3+level; hintsLeft=2; secret=generateNumber(); 
+  startTimer(); updateInfo(); 
+}
+
+storyText.textContent='You are trapped in a collapsing time loop. Unlock the vault before time runs out.';
+startTimer(); updateInfo();
+</script>
+</body>
+</html>
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+   
